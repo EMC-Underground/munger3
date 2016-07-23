@@ -1,0 +1,24 @@
+{
+  "name": "munger3",
+  "version": "1.0.0",
+  "description": "Node microservice to pull in install base data, obtain an insight and then post that insight in simple lightweight JSON",
+  "main": "munger3.js",
+  "dependencies": {
+    "aws-sdk": "^2.3.17",
+    "async": "^2.0.0-rc.6"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EMC-Underground/munger3.git"
+  },
+  "author": "Dana Young",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/EMC-Underground/munger3/issues"
+  },
+  "homepage": "https://github.com/EMC-Underground/munger3#readme"
+}
