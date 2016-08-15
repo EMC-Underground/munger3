@@ -1,29 +1,9 @@
 
 /***************************************************************************************************************
 ****************************************************************************************************************
-This is a microservice that extracts insights about the EMC install base from data originating from Ops Console.
-It runs continuously, hosted on Pivotal Cloud Foundry. Every 24 hours it queries the Elastic Cloud Storage (ECS)
-object store which hosts EMC field inventory info in JSON format. It then:
-- Pulls the current master list of customer GDUNs from the ECS repo.
-- Iterates through through all of the customer GDUNs.
-- For each customer GDUN, it pulls the install base data from ECS and:
-  builds a mapping array of each product serial number to a corresponding SO number.
-- It then stores the result in a sanitized JSON format in s3.
-The result is a list of objects (number of objects = number of GDUNS x number products at each GDUN) stored in s3.
-The name format used is <GDUN>.SNSO.3 (The .3 indicates this is a munger3 insight)
-The insight is stored under <GDUN>.SNSO.3.answer
-The objects can then be queried by front end apps like an Alexa Skill to return answers to questions like:
-'What is the SO number for serial number XYZ at Expedia?'
+Generates a list of serial numbers that can then be copied into the Alexa Skill Interaction Model
+under the 'SN' custom slot
 /***************************************************************************************************************
-****************************************************************************************************************/
-
-
-/***************************************************************************************************************/
-	mungerNumber = "3"		// Put the munger number here
-/***************************************************************************************************************/
-
-//START OF BOILERPLATE CODE
-/****************************************************************************************************************
 ****************************************************************************************************************/
 
 var AWS = require( "aws-sdk" ),
@@ -45,12 +25,13 @@ var ecsBucket = 'pacnwinstalls',
 AWS.config.loadFromPath(__dirname + '/AWSconfig.json');
 var s3 = new AWS.S3();
 
-// launch the Munger1 process
+var masterListOfSNs = [];
+
 console.log('starting cycleThru...');
 cycleThru();
 
-// This is the master function that calls the 2 supporting functions in series to
-// 1) get the list of GDUNS and then 2) process each one
+// This is the master function that calls the 3 supporting functions in series to
+// 1) get the list of GDUNS, 2) process each one and 3) write the master list of extracted serial numbers out to a file
 function cycleThru() {	
 	var customerListSource = 'PNWandNCAcustomers.json',
 		GDUNarray = [];
@@ -66,7 +47,7 @@ function cycleThru() {
             });
         },
 		
-        // get install base data for each gdun, extract insight, and post to s3
+        // get install base data for each gdun and extract the serial numbers for each
         function(callback) {
 			console.log('entering async.series 2 function');
             processGDUN(GDUNarray, function(err) {             
@@ -76,13 +57,20 @@ function cycleThru() {
 					callback(); // this is the callback saying this function is complete
 				}			
             });
-        }
+        },
+
+		// Store the resulting SN list in ECS
+		function(callback) {
+			storeSNList(masterListOfSNs, function(err, eTag) {
+				if (err) return callback(err); // task callback saying this function is complete but with an error, return prevents double callback
+				callback(); // this is the task callback saying this function is complete;
+			});
+		}			
+		
 		
     ], function(err) {		
 		//restart the whole cycle again from the top after wait time
-		setTimeout(function() {
-			cycleThru();
-		}, 86400000); // 86400000 = loop through 1 every 24 hours			
+		console.log('Process Complete.');
     });
 }
 
@@ -117,34 +105,31 @@ function getCustomerList(source, callback) {
 		}
 	});
 }
-
 		
-// This function iterates through all of the customer GDUNs,
-// pulling the install base data from ECS for each GDUN, mapping the SO number to each corresponding product serial number
-// It then stores the result in a sanitized JSON format in s3.	
+// This function iterates through all of the customer GDUNs, gets IB data for each, and adds the SNs to a master list
 function processGDUN(GDUNlist, callback) {
 	async.forEachSeries(GDUNlist, function(gdun, callback) {
-		var insightToStore;
+		var SNsToAdd;
 
 		async.series([
 		
 			// Pull install base data from ECS 
 			function(callback) {
-				getIBdata(gdun, function(err, insight) {
+				getIBdata(gdun, function(err, SNarray) {
 					if (err) {
 						console.log('Error getting install base data for GDUN=' + gdun + ': ' + err);
 						callback(err); // this is the task callback saying this function is complete but with an error;	
 					} else {
-						insightToStore = insight;
-						console.log('type of insightToStore = ' + typeof(insightToStore));
+						SNsToAdd = SNarray;
+						//console.log('type of SNsToAdd = ' + typeof(SNsToAdd));
 						callback(); // this is the task callback saying this function is complete;					
 					}
 				});
 			},
 			
-			// Store the resulting insight in s3
+			// Add the array of SNs from that GDUN to the master list
 			function(callback) {
-				storeInsight(gdun, insightToStore, function(err, eTag) {
+				addSNsToList(SNsToAdd, function(err) {
 					if (err) return callback(err); // task callback saying this function is complete but with an error, return prevents double callback
 					callback(); // this is the task callback saying this function is complete;
 				});
@@ -164,7 +149,7 @@ function processGDUN(GDUNlist, callback) {
 	});
 }	
 
-// This function pulls the install base data for a given GDUN, calls the function to extract the insight, and then provides the insight 
+// This function pulls the install base data for a given GDUN, calls the function to extract the SNs, and then provides the SNs 
 // in a callback to the calling function.
 function getIBdata(gdun, callback) {
 	console.log('entering getIBdata function');
@@ -192,11 +177,11 @@ function getIBdata(gdun, callback) {
 				if (payloadObject.records < 1) {
 					callback('no JSON payload in ' + key);
 				} else {	
-					extractInsight(payloadObject, function(insight)	{			 
+					extractSNs(payloadObject, function(SNs)	{			 
 						data = null; // free up memory
 						dataPayload = null; // free up memory
-						//console.log('insight = ' + JSON.stringify(insight));
-						callback(null, insight); // this is the  callback saying this getIBdata function is complete;
+						//console.log('SNs = ' + JSON.stringify(SNs));
+						callback(null, SNs); // this is the  callback saying this getIBdata function is complete;
 					})						
 				}												
 			} catch (e) {
@@ -206,50 +191,90 @@ function getIBdata(gdun, callback) {
 	});	
 }
 
-// This function stores the insight in s3
-function storeInsight(gdun, insightToStore, callback) {
-	//console.log('entering storeInsight function');
-	// create JSON formatted object body to store
-	var insightBody = insightToStore;				
-		
-	// put the data in the s3 bucket
-	var s3params = {
-			Bucket: awsBucket,
-			Key: gdun + '.' + 'SNSO' + '.' + mungerNumber,
-			Body: JSON.stringify(insightBody),
-			ContentType: 'json'
-		};	
-
-	s3.putObject(s3params, function(err, data) {
-		if (err) { 
-			callback(err); // this is the  callback saying this storeInsight function is complete but with error							
-		} else { 
-			// successful response	
-			console.log('Insight: ' + JSON.stringify(insightBody) + ' posted to s3 as: ' + gdun + '.' + 'SNSO' + '.' + mungerNumber + '\n');	
-			var eTag = JSON.parse(data.ETag);
-			data = null; // free up memory
-			callback(null, eTag); // this is the  callback saying this storeInsight function is complete
-		}						
+// This function stores the SN master list to a file
+function storeSNList(listToStore, callback) {
+	var fs = require('fs');
+	
+	fs.writeFile(__dirname + '/allSNs.txt', listToStore, function(err) {
+		if (err) {
+			return console.log(err);
+		}		
 	});
+
+	console.log("The file was saved as allSNs.txt in the local directory.");
+	console.log("The total SN count is: " + listToStore.length);
 }
 
-
-// This function returns the insight to the calling function
-function extractInsight(installBaseData, callback) {
-	console.log('entering extractInsight function');
+// This function returns the SNs from this IB data to the calling function
+function extractSNs(installBaseData, callback) {
+	console.log('entering extractSNs function');
 	
-	var	mappingArray = [] // this is the mapping between a SN and an SO
-	console.log('installBaseData.rows.length = ' + installBaseData.rows.length)
+	var	SNs = [] // a list of serial numbers
+	//console.log('installBaseData.rows.length = ' + installBaseData.rows.length)
 	
 	for (var i = 0; i < installBaseData.rows.length; i++) {
-		console.log('installBaseData.rows[i].ITEM_SERIAL_NUMBER = ' + installBaseData.rows[i].ITEM_SERIAL_NUMBER);
-		console.log('installBaseData.rows[i].SALES_ORDER = ' + installBaseData.rows[i].SALES_ORDER);
-		mappingArray.push( {SN: installBaseData.rows[i].ITEM_SERIAL_NUMBER, SO: installBaseData.rows[i].SALES_ORDER} )
+		//console.log('installBaseData.rows[i].ITEM_SERIAL_NUMBER = ' + installBaseData.rows[i].ITEM_SERIAL_NUMBER);
+		SNs.push( installBaseData.rows[i].ITEM_SERIAL_NUMBER )
 	}	
 	
 	installBaseData = null; // free up memory
-	//console.log('mappingArray = ' + JSON.stringify(mappingArray));
-	callback(mappingArray);
+	//console.log('SNs = ' + JSON.stringify(SNs));
+	callback(SNs);
 }
 
+// This function adds the list of SNs from a given GDUN to the master SN list
+function addSNsToList(SNsToAdd, callback) {
+	console.log('entering addSNsToList function');
 
+	try {
+		
+		console.log('SNsToAdd.length = ' + SNsToAdd.length)
+		
+		for (var i = 0; i < SNsToAdd.length; i++) {
+			//console.log('SNsToAdd[i] = ' + SNsToAdd[i]);
+			
+			var needle = SNsToAdd[i];
+			var index = contains.call(masterListOfSNs, needle); // true if item is already in masterListOfSNs
+
+			// only add the SN to the master list if it isn't already there
+			if (!index) {
+				masterListOfSNs.push( SNsToAdd[i] )
+			}	
+		}	
+		
+		//console.log('masterListOfSNs = ' + JSON.stringify(masterListOfSNs));
+		callback();
+		
+	} catch (e) {
+		callback('problem in adding SNs for GDUN to the master list');
+	}	
+	
+}
+
+// a function to determine if an item in in an array
+var contains = function(needle) {
+    // Per spec, the way to identify NaN is that it is not equal to itself
+    var findNaN = needle !== needle;
+    var indexOf;
+
+    if(!findNaN && typeof Array.prototype.indexOf === 'function') {
+        indexOf = Array.prototype.indexOf;
+    } else {
+        indexOf = function(needle) {
+            var i = -1, index = -1;
+
+            for(i = 0; i < this.length; i++) {
+                var item = this[i];
+
+                if((findNaN && item !== item) || item === needle) {
+                    index = i;
+                    break;
+                }
+            }
+
+            return index;
+        };
+    }
+
+    return indexOf.call(this, needle) > -1;
+};
