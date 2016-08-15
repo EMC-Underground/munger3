@@ -45,7 +45,7 @@ var ecsBucket = 'pacnwinstalls',
 AWS.config.loadFromPath(__dirname + '/AWSconfig.json');
 var s3 = new AWS.S3();
 
-// launch the Munger1 process
+// launch the Munger3 process
 console.log('starting cycleThru...');
 cycleThru();
 
