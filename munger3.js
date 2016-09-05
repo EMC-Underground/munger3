@@ -109,7 +109,7 @@ function getCustomerList(source, callback) {
 		if (err) {
 			callback(err, null); // this is the callback saying getCustomerList function is complete but with an error
 		} else { // success					
-			console.log(data.Body.toString()); // note: Body is outputted as type buffer which is an array of bytes of the body, hence toString() 
+			//console.log(data.Body.toString()); // note: Body is outputted as type buffer which is an array of bytes of the body, hence toString() 
 			var dataPayload = JSON.parse(data.Body);
 			
 			// load GDUNS array
@@ -176,7 +176,7 @@ function processGDUN(GDUNlist, callback) {
 // This function pulls the install base data for a given GDUN, calls the function to extract the insight, and then provides the insight 
 // in a callback to the calling function.
 function getIBdata(gdun, callback) {
-	console.log('entering getIBdata function');
+	//console.log('entering getIBdata function');
 	console.log('GDUN = ' + gdun);
 	var key = gdun + '.json';
 
@@ -197,7 +197,7 @@ function getIBdata(gdun, callback) {
 				var dataPayload = JSON.parse(data.Body) // converts data.Body to a string replacing the array of bytes
 				//console.log('dataPayload = ' + dataPayload);
 				var payloadObject = JSON.parse(dataPayload); // converts data.Body back to an object 
-				console.log('payloadObject.records = ' + payloadObject.records)
+				//console.log('payloadObject.records = ' + payloadObject.records)
 				if (payloadObject.records < 1) {
 					callback('no JSON payload in ' + key);
 				} else {	
@@ -245,14 +245,14 @@ function storeInsight(gdun, insightToStore, callback) {
 
 // This function returns the insight to the calling function
 function extractInsight(installBaseData, callback) {
-	console.log('entering extractInsight function');
+	//console.log('entering extractInsight function');
 	
 	var	mappingArray = [] // this is the mapping between a SN and an SO
-	console.log('installBaseData.rows.length = ' + installBaseData.rows.length)
+	//console.log('installBaseData.rows.length = ' + installBaseData.rows.length)
 	
 	for (var i = 0; i < installBaseData.rows.length; i++) {
-		console.log('installBaseData.rows[i].ITEM_SERIAL_NUMBER = ' + installBaseData.rows[i].ITEM_SERIAL_NUMBER);
-		console.log('installBaseData.rows[i].SALES_ORDER = ' + installBaseData.rows[i].SALES_ORDER);
+		//console.log('installBaseData.rows[i].ITEM_SERIAL_NUMBER = ' + installBaseData.rows[i].ITEM_SERIAL_NUMBER);
+		//console.log('installBaseData.rows[i].SALES_ORDER = ' + installBaseData.rows[i].SALES_ORDER);
 		mappingArray.push( {SN: installBaseData.rows[i].ITEM_SERIAL_NUMBER, SO: installBaseData.rows[i].SALES_ORDER} )
 	}	
 	
