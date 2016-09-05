@@ -86,7 +86,7 @@ function cycleThru() {
 		}
 		var datetime = new Date();
 		console.log('Cycle ended on: ' + datetime);	
-		console.log('now waiting 24 hrs before starting cycle again...');
+		console.log('now waiting 1 week before starting cycle again...');
 		//restart the whole cycle again from the top after wait time
 		setTimeout(function() {
 			cycleThru();
