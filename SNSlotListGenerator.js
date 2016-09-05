@@ -68,9 +68,16 @@ function cycleThru() {
 		}			
 		
 		
-    ], function(err) {		
-		//restart the whole cycle again from the top after wait time
-		console.log('Process Complete.');
+    ], function(err) {	
+		if (err) {
+			console.log('Full SN list likely not generated, error: ' + err);
+		} else {
+			console.log("Full SN list successfully generated, see allSNs.txt");
+			console.log("Take this txt file, eliminate all duplicates with Notepad++ plugin,");
+			console.log("then upload the results to the SN slot in the askEMC Alexa Skill");
+		}
+		var datetime = new Date();
+		console.log('Process ended on: ' + datetime);		
     });
 }
 
@@ -137,7 +144,8 @@ function processGDUN(GDUNlist, callback) {
 			
 		], function(err) { // this function gets called after the two tasks have called their "task callbacks"
 			if (err) {
-				callback(err); // this is the callback saying this run-thru of the series is complete for a given gdun in the async.forEach but with error
+				console.log('moving on to the next GDUN after error on the previous...')
+				callback(); // don't include the (err) in the callback so that the forEachSeries loop will move on to the next GDUN vs kick out of the process.
 			} else {
 				callback(); // this is the callback saying this run-thru of the series is complete for a given gdun in the async.forEach 				
 			}

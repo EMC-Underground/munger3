@@ -78,11 +78,19 @@ function cycleThru() {
             });
         }
 		
-    ], function(err) {		
+    ], function(err) {	
+		if (err) {
+			console.log('Full cycle likely not complete, error: ' + err);
+		} else {
+			console.log('Full cycle completed successfully');
+		}
+		var datetime = new Date();
+		console.log('Cycle ended on: ' + datetime);	
+		console.log('now waiting 24 hrs before starting cycle again...');
 		//restart the whole cycle again from the top after wait time
 		setTimeout(function() {
 			cycleThru();
-		}, 86400000); // 86400000 = loop through 1 every 24 hours			
+		}, 604800000); // 604800000 = loop through 1 every week		
     });
 }
 
@@ -152,7 +160,8 @@ function processGDUN(GDUNlist, callback) {
 			
 		], function(err) { // this function gets called after the two tasks have called their "task callbacks"
 			if (err) {
-				callback(err); // this is the callback saying this run-thru of the series is complete for a given gdun in the async.forEach but with error
+				console.log('moving on to the next GDUN after error on the previous...')
+				callback(); // Don't callback with (err) to prevent jumping out of the forEachSeries loop, and instead move on to the next GDUN
 			} else {
 				callback(); // this is the callback saying this run-thru of the series is complete for a given gdun in the async.forEach 				
 			}
