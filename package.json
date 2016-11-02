@@ -4,6 +4,7 @@
   "description": "Node microservice to pull in install base data, obtain an insight and then post that insight in simple lightweight JSON",
   "main": "munger3.js",
   "dependencies": {
+    "cfenv": "^1.0.3",
     "aws-sdk": "^2.3.17",
     "async": "^2.0.0-rc.6"
   },

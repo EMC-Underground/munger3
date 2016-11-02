@@ -3,31 +3,48 @@
 ****************************************************************************************************************
 Generates a list of serial numbers that can then be copied into the Alexa Skill Interaction Model
 under the 'SN' custom slot
+
+This app is run manually right now on a periodic basis to update the SN list
 /***************************************************************************************************************
 ****************************************************************************************************************/
 
 var AWS = require( "aws-sdk" ),
 	ECS = require( "aws-sdk" ),
+	cfenv = require("cfenv"),	
 	async = require( "async" );
 		
+// try and set the vcap from a local file, if it fails, appEnv will be set to use
+// the PCF user provided service specified with the getServiceCreds call
+var localVCAP  = null	
+try {
+	localVCAP = require("./local-vcap.json")
+	} catch(e) {}
+	
+var appEnv = cfenv.getAppEnv({vcap: localVCAP}) // vcap specification is ignored if not running locally
+var AWScreds  = appEnv.getServiceCreds('aws-creds-service') || {}
+var ECScreds  = appEnv.getServiceCreds('ecs-creds-service') || {}
+
+var AWSconfig = {
+  region: AWScreds.region,
+  accessKeyId: AWScreds.accessKeyId,
+  secretAccessKey: AWScreds.secretAccessKey
+};
+var s3 = new AWS.S3(AWSconfig);
+
 // setup ECS config to point to Bellevue lab 
 var ECSconfig = {
   s3ForcePathStyle: true,
-  endpoint: new AWS.Endpoint('http://10.4.44.125:9020')
+  endpoint: new AWS.Endpoint('http://10.5.208.212:9020'), // store to node 1 of 4 node cluster
+  accessKeyId: ECScreds.accessKeyId,
+  secretAccessKey: ECScreds.secretAccessKey
 };
-ECS.config.loadFromPath(__dirname + '/ECSconfig.json');
 var ecs = new ECS.S3(ECSconfig);
 
-var ecsBucket = 'pacnwinstalls',
-	awsBucket = 'munger-insights';
-
-// setup s3 config
-AWS.config.loadFromPath(__dirname + '/AWSconfig.json');
-var s3 = new AWS.S3();
+var ecsBucket = 'installBase';
 
 var masterListOfSNs = [];
 
-console.log('starting cycleThru...');
+console.log('starting SNSlotListGenerator cycleThru...');
 cycleThru();
 
 // This is the master function that calls the 3 supporting functions in series to
